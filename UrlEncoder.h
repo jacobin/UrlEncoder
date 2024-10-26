@@ -1,32 +1,16 @@
 #pragma once
+
 #include <wtypes.h>
 #include <string>
 
-class Encoder
+namespace UrlEncoder
 {
-public:
-    Encoder() {}
-    ~Encoder() {}
+    bool UrlEncode(const std::string& ansiString, std::string& utf8Result);
+    bool UrlDecode(const std::string& utf8string, std::string& ansiResult);
 
-    std::string UrlEncode(const std::string &str);
-    std::string UrlDecode(const std::string &str);
+    bool UTF8UrlEncode(const std::string& utf8string, std::string& utf8Result);
+    bool UTF8UrlDecode(const std::string& utf8string, std::string& utf8Result);
 
-    std::string UTF8UrlEncode(const std::string &str);
-    std::string UTF8UrlDecode(const std::string &str);
-
-
-private:
-
-    std::string UTF8StringToAnsiString(const std::string &strUtf8);
-    std::string AnsiStringToUTF8String(const std::string& strAnsi);
-
-    void AnsiToUnicode(WCHAR* pUnicodeBuffer, int nUnicodeBufferSize, const char *pAnsiBuffer, int nAnsiBufferSize);
-    void UnicodeToAnsi(char* pAnsiBuffer, int nAnsiBufferSize, WCHAR* pUnicodeBuffer, int nUnicodeBufferSize);
-
-    void UTF8CharToUnicodeChar(WCHAR* pUnicodeBuffer, const char *pUTF8Buffer);
-    void UnicodeCharToUTF8Char(char* pUTF8Buffer, const WCHAR* pUnicodeBuffer);
-
-    char CharToInt(char ch);
-    char StrToBin(char *pString);
-
+    bool UTF8StringToAnsiString(const std::string &utf8string, std::string& ansiResult);
+    bool AnsiStringToUTF8String(const std::string& ansiString, std::string& utf8result);
 };

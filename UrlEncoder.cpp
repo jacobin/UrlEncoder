@@ -1,181 +1,155 @@
-#include "stdafx.h"
-#include "Encoder.h"
+////////////////////////////////////////////////////////////////////////////////
+#include "UrlEncoder.h"
 #include <string>
 #include <assert.h>
 
-using namespace std;
-string Encoder::UrlEncode(const string &str)
+////////////////////////////////////////////////////////////////////////////////
+// https://github.com/tindy2013/subconverter////////////////////////////////////
+static unsigned char toHex(unsigned char x)
 {
-    string strResult;
-    size_t nLength = str.length();
-    unsigned char* pBytes = (unsigned char*)str.c_str();
-    char szAlnum[2];
-    char szOther[4];
-    for (size_t i = 0; i < nLength; i++)
+    return  x > 9 ? x + 55 : x + 48;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// https://github.com/tindy2013/subconverter////////////////////////////////////
+static unsigned char fromHex(unsigned char x)
+{
+    unsigned char y;
+    if (x >= 'A' && x <= 'Z')
+        y = x - 'A' + 10;
+    else if (x >= 'a' && x <= 'z')
+        y = x - 'a' + 10;
+    else if (x >= '0' && x <= '9')
+        y = x - '0';
+    else
+        y = x;
+    return y;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+// https://github.com/tindy2013/subconverter////////////////////////////////////
+static std::string urlEncode(const std::string& utf8str)
+{
+    std::string strTemp = "";
+    size_t length = utf8str.length();
+    for (size_t i = 0; i < length; i++)
     {
-        if (isalnum((BYTE)str[i]))
-        {
-            sprintf_s(szAlnum, sizeof(szAlnum), "%c", str[i]);
-            strResult.append(szAlnum);
-        }
-        else if (isspace((BYTE)str[i]))
-        {
-            strResult.append("+");
-        }
+        if (isalnum((unsigned char)utf8str[i]) ||
+            (utf8str[i] == '-') ||
+            (utf8str[i] == '_') ||
+            (utf8str[i] == '.') ||
+            (utf8str[i] == '~'))
+            strTemp += utf8str[i];
         else
         {
-            sprintf_s(szOther, sizeof(szOther), "%%%X%X", pBytes[i] >> 4, pBytes[i] % 16);
-            strResult.append(szOther);
+            strTemp += '%';
+            strTemp += toHex((unsigned char)utf8str[i] >> 4);
+            strTemp += toHex((unsigned char)utf8str[i] % 16);
         }
     }
-    return strResult;
+    return strTemp;
 }
 
-string Encoder::UrlDecode(const string &str)
+////////////////////////////////////////////////////////////////////////////////
+// https://github.com/tindy2013/subconverter////////////////////////////////////
+static std::string urlDecode(const std::string& utf8str)
 {
-    string strResult;
-    char szTemp[2];
-    size_t i = 0;
-    size_t nLength = str.length();
-    while (i < nLength)
+    std::string strTemp;
+    size_t length = utf8str.length();
+    for (size_t i = 0; i < length; i++)
     {
-        if (str[i] == '%')
+        if (utf8str[i] == '+')
+            strTemp += ' ';
+        else if (utf8str[i] == '%')
         {
-            szTemp[0] = str[i + 1];
-            szTemp[1] = str[i + 2];
-            strResult += StrToBin(szTemp);
-            i = i + 3;
-        }
-        else if (str[i] == '+')
-        {
-            strResult += ' ';
-            i++;
+            if (i + 2 >= length)
+                return strTemp;
+            if (isalnum(utf8str[i + 1]) && isalnum(utf8str[i + 2]))
+            {
+                unsigned char high = fromHex((unsigned char)utf8str[++i]);
+                unsigned char low = fromHex((unsigned char)utf8str[++i]);
+                strTemp += high * 16 + low;
+            }
+            else
+                strTemp += utf8str[i];
         }
         else
-        {
-            strResult += str[i];
-            i++;
-        }
+            strTemp += utf8str[i];
     }
-    return strResult;
+    return strTemp;
 }
 
-string Encoder::UTF8UrlEncode(const string &str)
+////////////////////////////////////////////////////////////////////////////////
+namespace UrlEncoder
 {
-    return UrlEncode(AnsiStringToUTF8String(str));
-}
-
-string Encoder::UTF8UrlDecode(const string &str)
-{
-    return UTF8StringToAnsiString(UrlDecode(str));
-}
-
-string Encoder::UTF8StringToAnsiString(const string &strUtf8)
-{
-    string strResult;
-    int nUTF8StringLength = strUtf8.length();
-    int nResultLength = nUTF8StringLength + (nUTF8StringLength >> 2) + 2;
-    strResult.resize(nResultLength);
-    int i = 0;
-    int j = 0;
-    char szBuffer[4] = { 0 };
-    WCHAR cchWideChar;
-    while (i < nUTF8StringLength)
+    ////////////////////////////////////////////////////////////////////////
+    bool UTF8StringToAnsiString(const std::string& utf8string, std::string& ansiResult)
     {
-        if (strUtf8[i] >= 0)
-        {
-            strResult[j++] = strUtf8[i++];
-        }
-        else
-        {
-            UTF8CharToUnicodeChar(&cchWideChar, &strUtf8[i]);
-            UnicodeToAnsi(szBuffer, 2, &cchWideChar, 1);
-
-            strResult[j] = szBuffer[0];
-            strResult[j + 1] = szBuffer[1];
-            strResult[j + 2] = szBuffer[2];
-            i += 3;
-            j += 2;
-        }
+        int nUtf8Len = utf8string.length();
+        wchar_t* wbuffer = new(std::nothrow) wchar_t[nUtf8Len + 1];
+        if (NULL == wbuffer) return false;
+        int nActualLen = MultiByteToWideChar(CP_UTF8, MB_PRECOMPOSED, utf8string.c_str(), nUtf8Len, wbuffer, nUtf8Len + 1);
+        if (0 == nActualLen) return false;
+        wbuffer[nActualLen] = NULL;
+        int nRequiredSize = WideCharToMultiByte(CP_ACP, 0, wbuffer, -1, NULL, 0, NULL, NULL);
+        if (0 == nRequiredSize) return false;
+        char* buffer = new(std::nothrow) char[nRequiredSize];
+        if (NULL == buffer) return false;
+        if (0 == WideCharToMultiByte(CP_ACP, 0, wbuffer, -1, buffer, nRequiredSize, NULL, NULL)) return false;
+        ansiResult = buffer;
+        return true;
     }
-    return strResult;
-}
 
-string Encoder::AnsiStringToUTF8String(const string& strAnsi)
-{
-    string strResult;
-    int nAnsiStringLength = strAnsi.length();
-    char szBuffer[4] = { 0 };
-    strResult.clear();
-    int i = 0;
-    char szAscii[2] = { 0 };
-    WCHAR cchWideChar;
-    while (i < nAnsiStringLength)
+    ////////////////////////////////////////////////////////////////////////
+    bool AnsiStringToUTF8String(const std::string& ansiString, std::string& utf8result)
     {
-        if (strAnsi[i] >= 0)
-        {
-            szAscii[0] = (strAnsi[i++]);
-            strResult.append(szAscii);
-        }
-        else
-        {
-            AnsiToUnicode(&cchWideChar, 1, &strAnsi[i], 2);
-            UnicodeCharToUTF8Char(szBuffer, &cchWideChar);
-            strResult.append(szBuffer);
-            i += 2;
-        }
+        int nAnsiLen = ansiString.length();
+        wchar_t* wbuffer = new(std::nothrow) wchar_t[nAnsiLen + 1];
+        if (NULL == wbuffer) return false;
+        int nActualLen = MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, ansiString.c_str(), nAnsiLen, wbuffer, nAnsiLen + 1);
+        if (0 == nActualLen) return false;
+        wbuffer[nActualLen] = NULL;
+        int nRequiredSize = WideCharToMultiByte(CP_UTF8, 0, wbuffer, -1, NULL, 0, NULL, NULL);
+        if (0 == nRequiredSize) return false;
+        char* buffer = new(std::nothrow) char[nRequiredSize];
+        if (NULL == buffer) return false;
+        if (0 == WideCharToMultiByte(CP_UTF8, 0, wbuffer, -1, buffer, nRequiredSize, NULL, NULL)) return false;
+        utf8result = buffer;
+        return true;
     }
-    return strResult;
-}
 
-void Encoder::AnsiToUnicode(WCHAR* pUnicodeBuffer, int nUnicodeBufferSize, const char *pAnsiBuffer, int nAnsiBufferSize)
-{
-    MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pAnsiBuffer, nAnsiBufferSize, pUnicodeBuffer, nUnicodeBufferSize);
-}
-
-void Encoder::UnicodeToAnsi(char* pAnsiBuffer, int nAnsiBufferSize, WCHAR* pUnicodeBuffer, int nUnicodeBufferSize)
-{
-    WideCharToMultiByte(CP_ACP, NULL, pUnicodeBuffer, nUnicodeBufferSize, pAnsiBuffer, nAnsiBufferSize, NULL, NULL);
-}
-
-void Encoder::UTF8CharToUnicodeChar(WCHAR* pUnicodeBuffer, const char *pUTF8Buffer)
-{
-    char* pChar = (char *)pUnicodeBuffer;
-    pChar[1] = ((pUTF8Buffer[0] & 0x0F) << 4) + ((pUTF8Buffer[1] >> 2) & 0x0F);
-    pChar[0] = ((pUTF8Buffer[1] & 0x03) << 6) + (pUTF8Buffer[2] & 0x3F);
-}
-
-void Encoder::UnicodeCharToUTF8Char(char* pUTF8Buffer, const WCHAR* pUnicodeBuffer)
-{
-    const char* pChar = (const char *)pUnicodeBuffer;
-    pUTF8Buffer[0] = (0xE0 | ((pChar[1] & 0xF0) >> 4));
-    pUTF8Buffer[1] = (0x80 | ((pChar[1] & 0x0F) << 2)) + ((pChar[0] & 0xC0) >> 6);
-    pUTF8Buffer[2] = (0x80 | (pChar[0] & 0x3F));
-}
-
-char Encoder::CharToInt(char ch)
-{
-    if (ch >= '0' && ch <= '9')
+    ////////////////////////////////////////////////////////////////////////
+    bool UrlEncode(const std::string& ansiString, std::string& utf8Result)
     {
-        return (char)(ch - '0');
+        std::string utf8Result2;
+        if (!AnsiStringToUTF8String(ansiString, utf8Result2)) return false;
+        utf8Result = urlEncode(utf8Result2);
+        return true;
     }
-    if (ch >= 'a' && ch <= 'f')
+
+    ////////////////////////////////////////////////////////////////////////
+    bool UrlDecode(const std::string& utf8string, std::string& ansiResult)
     {
-        return (char)(ch - 'a' + 10);
+        std::string utf8string2 = urlDecode(utf8string);
+        std::string ansiResult2;
+        if (!UTF8StringToAnsiString(utf8string2, ansiResult2)) return false;
+        ansiResult = ansiResult2;
+        return true;
     }
-    if (ch >= 'A' && ch <= 'F')
+
+    ////////////////////////////////////////////////////////////////////////
+    bool UTF8UrlEncode(const std::string& utf8string, std::string& utf8Result)
     {
-        return (char)(ch - 'A' + 10);
+        utf8Result = urlEncode(utf8string);
+        return true;
     }
-    return -1;
+
+    ////////////////////////////////////////////////////////////////////////
+    bool UTF8UrlDecode(const std::string& utf8string, std::string& utf8Result)
+    {
+        utf8Result = urlDecode(utf8string);
+        return true;
+    }
 }
 
-char Encoder::StrToBin(char *pString)
-{
-    char szBuffer[2];
-    char ch;
-    szBuffer[0] = CharToInt(pString[0]); //make the B to 11 -- 00001011 
-    szBuffer[1] = CharToInt(pString[1]); //make the 0 to 0 -- 00000000 
-    ch = (szBuffer[0] << 4) | szBuffer[1]; //to change the BO to 10110000 
-    return ch;
-}
+////////////////////////////////// END /////////////////////////////////////////
